@@ -1,0 +1,101 @@
+name: Publish Docker
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to run the action on"
+        default: "main"
+        required: true
+
+jobs:
+  build_and_publish_platform_containers:
+    name: Build and publish platform containers
+    runs-on: ${{ matrix.os }}
+    permissions:
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - warp-ubuntu-latest-x64-2x
+          - warp-ubuntu-latest-arm64-2x
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build the docker image
+        env:
+          BUILD_PLATFORM: ${{ matrix.os == 'warp-ubuntu-latest-arm64-2x' && 'arm64' || 'amd64' }}
+        run: |
+          APP_VERSION="$(git name-rev --tags --name-only $(git rev-parse HEAD) | head -n 1 | sed 's/\^0//')"
+          GIT_SHA="$(git rev-parse HEAD)"
+
+          docker build \
+            -f Dockerfile \
+            --progress=plain \
+            -t "unsend/local-ses-sns-$BUILD_PLATFORM:latest" \
+            -t "unsend/local-ses-sns-$BUILD_PLATFORM:$GIT_SHA" \
+            -t "unsend/local-ses-sns-$BUILD_PLATFORM:$APP_VERSION" \
+            .
+
+      - name: Push the docker image to DockerHub
+        run: docker push --all-tags "unsend/local-ses-sns-$BUILD_PLATFORM"
+        env:
+          BUILD_PLATFORM: ${{ matrix.os == 'warp-ubuntu-latest-arm64-2x' && 'arm64' || 'amd64' }}
+
+  create_and_publish_manifest:
+    name: Create and publish manifest
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    needs: build_and_publish_platform_containers
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create and push DockerHub manifest
+        run: |
+          APP_VERSION="$(git name-rev --tags --name-only $(git rev-parse HEAD) | head -n 1 | sed 's/\^0//')"
+          GIT_SHA="$(git rev-parse HEAD)"
+
+          docker manifest create \
+            unsend/local-ses-sns:latest \
+            --amend unsend/local-ses-sns-amd64:latest \
+            --amend unsend/local-ses-sns-arm64:latest
+
+          docker manifest create \
+            unsend/local-ses-sns:$GIT_SHA \
+            --amend unsend/local-ses-sns-amd64:$GIT_SHA \
+            --amend unsend/local-ses-sns-arm64:$GIT_SHA
+
+          docker manifest create \
+            unsend/local-ses-sns:$APP_VERSION \
+            --amend unsend/local-ses-sns-amd64:$APP_VERSION \
+            --amend unsend/local-ses-sns-arm64:$APP_VERSION
+
+          docker manifest push unsend/local-ses-sns:latest
+          docker manifest push unsend/local-ses-sns:$GIT_SHA
+          docker manifest push unsend/local-ses-sns:$APP_VERSION

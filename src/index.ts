@@ -17,7 +17,7 @@ console.log(`WEBHOOK_URL: ${WEBHOOK_URL}`);
 const EMAIL_EVENT_PATTERNS = {
   "delivered@test.com": ["Send", "Delivery"],
   "bounced@test.com": ["Send", "Bounce"],
-  "complained@test.com": ["Send", "Complaint"],
+  "complained@test.com": ["Send", "Delivery", "Complaint"],
   "rejected@test.com": ["Send", "Reject"],
   "opened@test.com": ["Send", "Delivery", "Open"],
   "clicked@test.com": ["Send", "Delivery", "Click"],
