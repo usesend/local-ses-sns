@@ -42,6 +42,7 @@ console.log(`Starting AWS SNS 🔔 at http://localhost:${PORT}/api/sns`);
 const requestLogger: MiddlewareHandler = async (c, next) => {
   const { method, url } = c.req;
   console.log(`Received ${method} request for ${url}`);
+
   await next(); // Pass control to the next handler
 };
 
@@ -348,9 +349,15 @@ app.get("/api/ses/v2/account", async (c) => {
   });
 });
 
+app.post("/api/ses/v2/email/configuration-sets", async (c) => {
+  const body = await c.req.json();
+  console.log("Configuration", body);
+  return c.json({});
+});
+
 // CreateConfigurationSetEventDestination
 app.post(
-  "/api/ses/v2/configuration-sets/:configSet/event-destinations",
+  "/api/ses/v2/email/configuration-sets/:configSet/event-destinations",
   async (c) => {
     const { configSet } = c.req.param();
     const body = await c.req.json();
@@ -363,11 +370,95 @@ app.post(
   }
 );
 
-app.post("/sns", async (c) => {
-  const body = c.req.json();
-  console.log(body);
-  return c.text("Hello Hono!");
+app.post("/api/sns/", async (c) => {
+  const body = await c.req.text();
+  console.log("SNS", body);
+
+  // Parse query string style body into object
+  const params = new URLSearchParams(body);
+  const action = params.get("Action");
+
+  console.log("Action", action);
+
+  c.header("Content-Type", "application/xml");
+
+  switch (action) {
+    case "CreateTopic":
+      return c.text(`<?xml version="1.0"?>
+<CreateTopicResponse xmlns="https://sns.amazonaws.com/doc/2010-03-31/">
+    <CreateTopicResult>
+        <TopicArn>arn:aws:sns:us-east-1:123456789012:${params.get(
+          "Name"
+        )}</TopicArn>
+    </CreateTopicResult>
+    <ResponseMetadata>
+        <RequestId>${randomUUID()}</RequestId>
+    </ResponseMetadata>
+</CreateTopicResponse>`);
+
+    case "Subscribe":
+      const topicArn = params.get("TopicArn");
+      const endpoint = params.get("Endpoint");
+      if (topicArn && endpoint) {
+        handleSNSSubscription(topicArn, endpoint);
+      }
+      return c.text(`<?xml version="1.0"?>
+<SubscribeResponse xmlns="https://sns.amazonaws.com/doc/2010-03-31/">
+    <SubscribeResult>
+        <SubscriptionArn>arn:aws:sns:us-east-1:123456789012:${params.get(
+          "TopicArn"
+        )}:${randomUUID()}</SubscriptionArn>
+    </SubscribeResult>
+    <ResponseMetadata>
+        <RequestId>${randomUUID()}</RequestId>
+    </ResponseMetadata>
+</SubscribeResponse>`);
+
+    case "Publish":
+      return c.text(`<?xml version="1.0"?>
+<PublishResponse xmlns="https://sns.amazonaws.com/doc/2010-03-31/">
+    <PublishResult>
+        <MessageId>${randomUUID()}</MessageId>
+    </PublishResult>
+    <ResponseMetadata>
+        <RequestId>${randomUUID()}</RequestId>
+    </ResponseMetadata>
+</PublishResponse>`);
+
+    case "DeleteTopic":
+      return c.text(`<?xml version="1.0"?>
+<DeleteTopicResponse xmlns="https://sns.amazonaws.com/doc/2010-03-31/">
+    <DeleteTopicResult>
+        <TopicArn>arn:aws:sns:us-east-1:123456789012:${params.get(
+          "TopicArn"
+        )}</TopicArn>
+    </DeleteTopicResult>
+  </DeleteTopicResponse>`);
+
+    default:
+      c.status(400);
+      return c.text(`<?xml version="1.0"?>
+<ErrorResponse xmlns="https://sns.amazonaws.com/doc/2010-03-31/">
+    <Error>
+        <Type>Sender</Type>
+        <Code>InvalidAction</Code>
+        <Message>The action ${action} is not valid</Message>
+    </Error>
+    <RequestId>${randomUUID()}</RequestId>
+</ErrorResponse>`);
+  }
 });
+
+async function handleSNSSubscription(topicArn: string, url: string) {
+  fetch(url, {
+    method: "POST",
+    body: JSON.stringify({
+      SubscribeURL: `http://localhost:${PORT}`,
+      TopicArn: topicArn,
+      Type: "SubscriptionConfirmation",
+    }),
+  });
+}
 
 // GetAllEmails
 app.get("/api/emails", async (c) => {
