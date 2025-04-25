@@ -17,6 +17,7 @@ console.log(`WEBHOOK_URL: ${WEBHOOK_URL}`);
 const EMAIL_EVENT_PATTERNS = {
   "delivered@test.com": ["Send", "Delivery"],
   "bounced@test.com": ["Send", "Bounce"],
+  "softbounced@test.com": ["Send", "Delivery", "Bounce"],
   "complained@test.com": ["Send", "Delivery", "Complaint"],
   "rejected@test.com": ["Send", "Reject"],
   "opened@test.com": ["Send", "Delivery", "Open"],
@@ -217,13 +218,23 @@ async function sendWebhookNotification(
       };
       break;
     case "Bounce":
-      eventData.bounce = {
-        bounceType: "Permanent",
-        bounceSubType: "General",
-        timestamp,
-        feedbackId: randomUUID(),
-        bouncedRecipients: [{ emailAddress: recipient }],
-      };
+      if (recipient === "softbounced@test.com") {
+        eventData.bounce = {
+          bounceType: "Transient",
+          bounceSubType: "General",
+          timestamp,
+          feedbackId: randomUUID(),
+          bouncedRecipients: [{ emailAddress: recipient }],
+        };
+      } else {
+        eventData.bounce = {
+          bounceType: "Permanent",
+          bounceSubType: "General",
+          timestamp,
+          feedbackId: randomUUID(),
+          bouncedRecipients: [{ emailAddress: recipient }],
+        };
+      }
       break;
     case "Complaint":
       eventData.complaint = {
