@@ -316,6 +316,8 @@ app.post("/api/ses/v2/email/outbound-emails", async (c) => {
   const destination = body.Destination;
   const toAddresses = destination?.ToAddresses || [];
 
+  console.log("Received email", body, messageId, toAddresses);
+
   // Process each recipient
   for (const recipient of toAddresses) {
     let matchFound = false;
@@ -332,6 +334,8 @@ app.post("/api/ses/v2/email/outbound-emails", async (c) => {
         break;
       }
     }
+
+    console.log("Match found", matchFound, recipient);
 
     // If no pattern matched, send default Send and Delivery events
     if (!matchFound) {
