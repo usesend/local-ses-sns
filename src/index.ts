@@ -1,6 +1,7 @@
 import { Hono, MiddlewareHandler } from "hono";
 import { randomUUID } from "crypto";
 import { generateKeyPair } from "crypto";
+import { simpleParser } from "mailparser";
 
 // Simple in-memory storage
 const EMAIL_IDENTITIES = new Map<string, any>();
@@ -312,9 +313,46 @@ app.post("/api/ses/v2/email/outbound-emails", async (c) => {
   const messageId = randomUUID();
   SENT_EMAILS.push({ ...body, MessageId: messageId });
 
-  // Extract recipient email
-  const destination = body.Destination;
-  const toAddresses = destination?.ToAddresses || [];
+  let toAddresses: string[] = [];
+
+  // Check if this is a raw email
+  if (body.Content?.Raw?.Data) {
+    try {
+      // Decode base64 raw email data
+      const rawEmailData = Buffer.from(
+        body.Content.Raw.Data,
+        "base64"
+      ).toString("utf-8");
+
+      // Parse the raw email
+      const parsed = await simpleParser(rawEmailData);
+
+      // Extract recipient addresses from the parsed email
+      if (parsed.to) {
+        if (Array.isArray(parsed.to)) {
+          toAddresses = parsed.to
+            .map((addr: any) => addr.address || addr.text || addr)
+            .filter(Boolean);
+        } else if (typeof parsed.to === "object" && parsed.to.text) {
+          // Handle single recipient object
+          toAddresses = [parsed.to.text];
+        } else if (typeof parsed.to === "string") {
+          // Handle string format
+          toAddresses = [parsed.to];
+        }
+      }
+
+      console.log("Parsed raw email - To addresses:", toAddresses);
+    } catch (error) {
+      console.error("Error parsing raw email:", error);
+      // Fallback to empty array if parsing fails
+      toAddresses = [];
+    }
+  } else {
+    // Handle structured email format (existing logic)
+    const destination = body.Destination;
+    toAddresses = destination?.ToAddresses || [];
+  }
 
   console.log("Received email", body, messageId, toAddresses);
 
