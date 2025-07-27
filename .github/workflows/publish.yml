@@ -21,8 +21,8 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest
-          - ubuntu-24.04-arm64
+          - warp-ubuntu-latest-x64-2x
+          - warp-ubuntu-latest-arm64-2x
 
     steps:
       - uses: actions/checkout@v4
@@ -47,7 +47,7 @@ jobs:
 
       - name: Build the docker image
         env:
-          BUILD_PLATFORM: ${{ matrix.os == 'ubuntu-24.04-arm64' && 'arm64' || 'amd64' }}
+          BUILD_PLATFORM: ${{ matrix.os == 'warp-ubuntu-latest-arm64-2x' && 'arm64' || 'amd64' }}
         run: |
           APP_VERSION="$(git name-rev --tags --name-only $(git rev-parse HEAD) | head -n 1 | sed 's/\^0//')"
           GIT_SHA="$(git rev-parse HEAD)"
@@ -66,12 +66,12 @@ jobs:
       - name: Push the docker image to DockerHub
         run: docker push --all-tags "unsend/local-ses-sns-$BUILD_PLATFORM"
         env:
-          BUILD_PLATFORM: ${{ matrix.os == 'ubuntu-24.04-arm64' && 'arm64' || 'amd64' }}
+          BUILD_PLATFORM: ${{ matrix.os == 'warp-ubuntu-latest-arm64-2x' && 'arm64' || 'amd64' }}
 
       - name: Push the docker image to GitHub Container Registry
         run: docker push --all-tags "ghcr.io/unsend-dev/local-ses-sns-$BUILD_PLATFORM"
         env:
-          BUILD_PLATFORM: ${{ matrix.os == 'ubuntu-24.04-arm64' && 'arm64' || 'amd64' }}
+          BUILD_PLATFORM: ${{ matrix.os == 'warp-ubuntu-latest-arm64-2x' && 'arm64' || 'amd64' }}
 
   create_and_publish_manifest:
     name: Create and publish manifest
